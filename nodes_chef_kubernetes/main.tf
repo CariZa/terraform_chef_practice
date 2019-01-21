@@ -1,5 +1,9 @@
 # nodes_chef.tf
 
+# /etc/apt/apt.conf.d
+#
+# needs to be here:
+# /etc/apt/sources.list.d/kubernetes.list
 
 # ssh-keygen -f chefpracnew-validator.pub -i -mPKCS8 > testvalid
 
@@ -52,7 +56,7 @@ resource "digitalocean_droplet" "nodes" {
       timeout = "2m"
     }
     environment     = "_default"
-    run_list        = ["recipe[workstation]", "recipe[apache]"]
+    run_list        = ["recipe[kubernetes_setup]"]
     node_name       = "web-${count.index}"
     server_url      = "${var.chef_server_url}"
     recreate_client = true
