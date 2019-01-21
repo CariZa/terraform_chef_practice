@@ -16,11 +16,6 @@ variable "ssh_chef_key_name" {
   default = "Chef"
 }
 
-# resource "digitalocean_ssh_key" "testcariza" {
-#    name = "SSH Key Credential"
-#    public_key = "${file("testcari.pub")}"
-# }
-
 # Configure the DigitalOcean Provider
 provider "digitalocean" {
   token = "${var.do_token}"
@@ -46,9 +41,7 @@ resource "digitalocean_droplet" "nodes" {
   ssh_keys = [
     "${data.digitalocean_ssh_key.default.fingerprint}",
     "${data.digitalocean_ssh_key.chef.fingerprint}"
-    #"${digitalocean_ssh_key.testcariza.id}"
   ]
-  # user_data = "${var.user_data}"
 
   provisioner "chef" {
     connection {
