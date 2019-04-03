@@ -7,25 +7,14 @@
 
 # ssh-keygen -f chefpracnew-validator.pub -i -mPKCS8 > testvalid
 
-# Set the variable value in *.tfvars file
-# or using -var="do_token=..." CLI option
-variable "do_token" {}
-variable "name_nodes" {}
-variable "ssh_key_name" {}
-variable "number_of_nodes" {}
-variable "chef_server_url" {}
 
-variable "ssh_chef_key_name" {
-  type = "string"
-  default = "Chef"
-}
 
 # Configure the DigitalOcean Provider
 provider "digitalocean" {
   token = "${var.do_token}"
 }
 
-# Use existing ssh key stored on Digital Ocea
+# Use existing ssh key stored on Digital Ocean
 data "digitalocean_ssh_key" "default" {
   name = "${var.ssh_key_name}"
 }
@@ -35,12 +24,14 @@ data "digitalocean_ssh_key" "chef" {
 }
 
 # Create a web server
-resource "digitalocean_droplet" "nodes" {
-  count    = "${var.number_of_nodes}"
+
+### Masters
+resource "digitalocean_droplet" "leaders" {
+  count    = "${var.number_of_leaders}"
   image    = "ubuntu-18-04-x64"
-  name     = "${var.name_nodes}-${count.index}"
+  name     = "leader-${count.index}"
   region   = "ams3"
-  size     = "s-1vcpu-3gb"
+  size     = "s-2vcpu-2gb"
   
   ssh_keys = [
     "${data.digitalocean_ssh_key.default.fingerprint}",
@@ -56,8 +47,83 @@ resource "digitalocean_droplet" "nodes" {
       timeout = "2m"
     }
     environment     = "_default"
-    run_list        = ["recipe[kubernetes_setup]"]
-    node_name       = "web-${count.index}"
+    # run_list        = []
+    run_list        = ["recipe[kubernetes_setup]","recipe[kubernetes_cni]", "recipe[kubernetes_leader]"]
+    node_name       = "leader-${count.index}"
+    server_url      = "${var.chef_server_url}"
+    recreate_client = true
+    user_name       = "cariza"
+    user_key        = "${file("cariza.pem")}"
+    ssl_verify_mode = ":verify_none"
+  }
+
+  # provisioner "chef" {
+  #   connection {
+  #     type = "ssh"
+  #     user = "root"
+  #     agent = true
+  #     private_key = "${file("cariza.pem")}"
+  #     timeout = "2m"
+  #   }
+  #   environment     = "_default"
+  #   # run_list        = []
+  #   run_list        = ["recipe[kubernetes_cni]"]
+  #   node_name       = "leader-${count.index}"
+  #   server_url      = "${var.chef_server_url}"
+  #   recreate_client = true
+  #   user_name       = "cariza"
+  #   user_key        = "${file("cariza.pem")}"
+  #   ssl_verify_mode = ":verify_none"
+  # }
+
+  # provisioner "chef" {
+  #   connection {
+  #     type = "ssh"
+  #     user = "root"
+  #     agent = true
+  #     private_key = "${file("cariza.pem")}"
+  #     timeout = "2m"
+  #   }
+  #   environment     = "_default"
+  #   # run_list        = []
+  #   run_list        = ["recipe[kubernetes_leader]"]
+  #   node_name       = "leader-${count.index}"
+  #   server_url      = "${var.chef_server_url}"
+  #   recreate_client = true
+  #   user_name       = "cariza"
+  #   user_key        = "${file("cariza.pem")}"
+  #   ssl_verify_mode = ":verify_none"
+  # }
+}
+
+### Minions
+resource "digitalocean_droplet" "minions" {
+
+  depends_on = ["digitalocean_droplet.leaders"]
+
+  count    = "${var.number_of_minions}"
+  image    = "ubuntu-18-04-x64"
+  name     = "minion-${count.index}"
+  region   = "ams3"
+  size     = "s-1vcpu-1gb"
+  
+  ssh_keys = [
+    "${data.digitalocean_ssh_key.default.fingerprint}",
+    "${data.digitalocean_ssh_key.chef.fingerprint}"
+  ]
+
+  provisioner "chef" {
+    connection {
+      type = "ssh"
+      user = "root"
+      agent = true
+      private_key = "${file("cariza.pem")}"
+      timeout = "2m"
+    }
+    environment     = "_default"
+    run_list        = ["recipe[kubernetes_setup]","recipe[kubernetes_minion]"] # "recipe[kubernetes_minion]", <- this wont work without the kubeadm join command
+    # run_list        = []
+    node_name       = "minion-${count.index}"
     server_url      = "${var.chef_server_url}"
     recreate_client = true
     user_name       = "cariza"
@@ -95,8 +161,12 @@ resource "digitalocean_droplet" "nodes" {
 #}
 
 
-output "controller_ip_address" {
-    value = "${digitalocean_droplet.nodes.*.ipv4_address}"
+output "controller_ip_address_leaders" {
+    value = "${digitalocean_droplet.leaders.*.ipv4_address}"
+}
+
+output "controller_ip_address_minions" {
+    value = "${digitalocean_droplet.minions.*.ipv4_address}"
 }
 
 # Store the digital ocean token as an environment variable called DOTOKEN
@@ -104,12 +174,12 @@ output "controller_ip_address" {
 
 # Run these:
 # $ terraform init
-# $ terraform plan -var="do_token=$DOTOKEN" -var="ssh_key_name=$SSHKEYNAME" -var="number_of_nodes=3" -var="name_nodes=web" -var="chef_server_url=$CHEFSERVERURL"
+# $ terraform plan -var="do_token=$DOTOKEN" -var="ssh_key_name=$SSHKEYNAME" -var="number_of_leaders=1" -var="number_of_minions=2" -var="chef_server_url=$CHEFSERVERURL"
     # - Output will end with: Plan: 1 to add, 0 to change, 0 to destroy.
-# $ terraform apply -var="do_token=$DOTOKEN" -var="ssh_key_name=$SSHKEYNAME" -var="number_of_nodes=3" -var="name_nodes=web" -var="chef_server_url=$CHEFSERVERURL"
+# $ terraform apply -var="do_token=$DOTOKEN" -var="ssh_key_name=$SSHKEYNAME" -var="number_of_leaders=1" -var="number_of_minions=2" -var="chef_server_url=$CHEFSERVERURL"
 
 # To destroy:
-# $ terraform destroy -var="do_token=$DOTOKEN" -var="ssh_key_name=$SSHKEYNAME" -var="number_of_nodes=3" -var="name_nodes=web" -var="chef_server_url=$CHEFSERVERURL"
+# $ terraform destroy -var="do_token=$DOTOKEN" -var="ssh_key_name=$SSHKEYNAME" -var="number_of_leaders=1" -var="number_of_minions=2" -var="chef_server_url=$CHEFSERVERURL"
 
 
 
@@ -123,3 +193,6 @@ output "controller_ip_address" {
 # terraform apply -var="do_token=$DOTOKEN" -var="ssh_key_name=$SSHKEYNAME" -var="number_of_nodes=1" -var="name_nodes=chef"
 
 # ssh-keygen -f pub1key.pub -i
+
+
+# $ terraform apply -var="do_token=$DOTOKEN" -var="ssh_key_name=$SSHKEYNAME" -var="ssh_key_name=$SSHKEYNAME" -var="number_of_leaders=1" -var="number_of_minions=0" -var="chef_server_url=$CHEFSERVERURL"
