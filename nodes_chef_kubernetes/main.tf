@@ -32,7 +32,7 @@ resource "digitalocean_droplet" "leaders" {
   name     = "leader-${count.index}"
   region   = "ams3"
   size     = "s-2vcpu-2gb"
-  
+
   ssh_keys = [
     "${data.digitalocean_ssh_key.default.fingerprint}",
     "${data.digitalocean_ssh_key.chef.fingerprint}"
@@ -55,6 +55,7 @@ resource "digitalocean_droplet" "leaders" {
     user_name       = "cariza"
     user_key        = "${file("cariza.pem")}"
     ssl_verify_mode = ":verify_none"
+    client_options = [ "chef_license 'accept'" ]
   }
 
   # provisioner "chef" {
@@ -105,8 +106,9 @@ resource "digitalocean_droplet" "minions" {
   image    = "ubuntu-18-04-x64"
   name     = "minion-${count.index}"
   region   = "ams3"
-  size     = "s-1vcpu-1gb"
-  
+  size     = "s-2vcpu-2gb"
+  # "s-1vcpu-1gb"
+
   ssh_keys = [
     "${data.digitalocean_ssh_key.default.fingerprint}",
     "${data.digitalocean_ssh_key.chef.fingerprint}"
@@ -129,6 +131,7 @@ resource "digitalocean_droplet" "minions" {
     user_name       = "cariza"
     user_key        = "${file("cariza.pem")}"
     ssl_verify_mode = ":verify_none"
+    client_options = [ "chef_license 'accept'" ]
   }
 }
 
@@ -171,6 +174,8 @@ output "controller_ip_address_minions" {
 
 # Store the digital ocean token as an environment variable called DOTOKEN
 # test token by running: $ echo $DOTOKEN
+# udm international - platinum
+#
 
 # Run these:
 # $ terraform init

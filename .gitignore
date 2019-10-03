@@ -14,6 +14,10 @@
 **/.backup
 **/*/.backup
 
+*.lock.info
+**/.lock.info
+**/*/.lock.info
+
 .terraform
 **/.terraform
 **/*/.terraform
